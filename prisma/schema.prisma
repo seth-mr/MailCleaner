@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PassStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+}
+
+enum ProtectionScope {
+  SENDER
+  DOMAIN
+  BRAND
+}
+
+enum AutoCleanRuleType {
+  BLOCK_SENDER
+  BLOCK_DOMAIN
+  CLEAN_QUERY
+}
+
+model User {
+  id                   String     @id @default(cuid())
+  name                 String?
+  email                String?    @unique
+  emailVerified        DateTime?
+  image                String?
+  passStatus           PassStatus @default(TRIAL)
+  passExpiresAt        DateTime?
+  reclaimedBytes       Float      @default(0)
+  cleanedMessagesCount Int        @default(0)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  accounts       Account[]
+  sessions       Session[]
+  cachedMessages CachedMessage[]
+  protectedRules ProtectedRule[]
+  autoCleanRules AutoCleanRule[]
+  cleanLogs      CleanLog[]
+}
+
+model CleanLog {
+  id           String   @id @default(cuid())
+  userId       String
+  action       String
+  messageCount Int
+  bytesFreed   Float    @default(0)
+  summary      String
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AutoCleanRule {
+  id            String            @id @default(cuid())
+  userId        String
+  type          AutoCleanRuleType
+  label         String
+  pattern       String
+  action        String            @default("trash")
+  schedule      String            @default("manual")
+  isEnabled     Boolean           @default(true)
+  nextRunAt     DateTime?
+  gmailFilterId String?
+  lastRunAt     DateTime?
+  lastRunCount  Int               @default(0)
+  lastRunStatus String            @default("idle")
+  lastRunError  String?
+  createdAt     DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, pattern])
+  @@index([userId])
+  @@index([isEnabled, schedule, nextRunAt])
+}
+
+model ProtectedRule {
+  id        String          @id @default(cuid())
+  userId    String
+  scope     ProtectionScope
+  pattern   String
+  createdAt DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, scope, pattern])
+  @@index([userId])
+}
+
+model CachedMessage {
+  id                   String   @id @default(cuid())
+  userId               String
+  gmailMessageId       String
+  fromHeader           String
+  subject              String
+  dateIso              String?
+  sizeBytes            Int
+  hasUnsubscribeHeader Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, gmailMessageId])
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
